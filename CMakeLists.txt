@@ -838,7 +838,7 @@ IF(USE_HDF5)
   set (CMAKE_REQUIRED_INCLUDES ${HDF5_INCLUDE_DIR})
 
 
-  CHECK_C_SOURCE_COMPILES("#include <H5public.h>
+  CHECK_C_SOURCE_COMPILES("#include <H5pubconf.h>
    #if !H5_HAVE_ZLIB_H
    #error
    #endif
