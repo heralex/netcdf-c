@@ -138,18 +138,18 @@ STRING(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE)
 # Determine the configure date.
 
 IF(DEFINED ENV{SOURCE_DATE_EPOCH})
-	EXECUTE_PROCESS(
-	  COMMAND "date" "-u" "-d" "@$ENV{SOURCE_DATE_EPOCH}"
-	  OUTPUT_VARIABLE CONFIG_DATE
-	  )
+        EXECUTE_PROCESS(
+          COMMAND "date" "-u" "-d" "@$ENV{SOURCE_DATE_EPOCH}"
+          OUTPUT_VARIABLE CONFIG_DATE
+          )
 ELSE()
-	EXECUTE_PROCESS(
-	  COMMAND date
-	  OUTPUT_VARIABLE CONFIG_DATE
-	  )
+        EXECUTE_PROCESS(
+          COMMAND date
+          OUTPUT_VARIABLE CONFIG_DATE
+          )
 ENDIF()
 IF(CONFIG_DATE)
-	string(STRIP ${CONFIG_DATE} CONFIG_DATE)
+        string(STRIP ${CONFIG_DATE} CONFIG_DATE)
 ENDIF()
 ##
 # Allow for extra dependencies.
@@ -767,7 +767,7 @@ IF(USE_HDF5)
           SET(HDF5_C_LIBRARY_hdf5 ${HDF5_C_${NC_HDF5_LINK_TYPE_UPPER}_LIBRARY})
           SET(HDF5_HL_LIBRARY ${HDF5_HL_${NC_HDF5_LINK_TYPE_UPPER}_LIBRARY})
 
-      	  SET(HDF5_LIBRARIES ${HDF5_C_${NC_HDF5_LINK_TYPE_UPPER}_LIBRARY} ${HDF5_HL_${NC_HDF5_LINK_TYPE_UPPER}_LIBRARY})
+          SET(HDF5_LIBRARIES ${HDF5_C_${NC_HDF5_LINK_TYPE_UPPER}_LIBRARY} ${HDF5_HL_${NC_HDF5_LINK_TYPE_UPPER}_LIBRARY})
         ENDIF()
       ENDIF(${HDF5_VERSION} VERSION_GREATER "1.8.15")
 
@@ -794,7 +794,7 @@ IF(USE_HDF5)
     IF(NOT HDF5_C_LIBRARY)
       SET(HDF5_C_LIBRARY hdf5)
     ENDIF()
-  
+
   ENDIF(HDF5_C_LIBRARY AND HDF5_HL_LIBRARY AND HDF5_INCLUDE_DIR)
 
   FIND_PACKAGE(Threads)
@@ -814,8 +814,8 @@ IF(USE_HDF5)
   set (CMAKE_REQUIRED_INCLUDES ${HDF5_INCLUDE_DIR})
 
   # Check to ensure that HDF5 was built with zlib.
-  # This needs to be near the beginning since we 
-  # need to know whether to add "-lz" to the symbol 
+  # This needs to be near the beginning since we
+  # need to know whether to add "-lz" to the symbol
   # tests below.
   CHECK_C_SOURCE_COMPILES("#include <H5public.h>
    #if !H5_HAVE_ZLIB_H
@@ -894,9 +894,9 @@ IF(USE_HDF5)
   CHECK_LIBRARY_EXISTS(${HDF5_C_LIBRARY_hdf5} H5resize_memory "" HAVE_H5RESIZE_MEMORY)
 
   IF(HDF5_PARALLEL)
-	SET(HDF5_CC h5pcc)
+        SET(HDF5_CC h5pcc)
   ELSE()
-	SET(HDF5_CC h5cc)
+        SET(HDF5_CC h5cc)
   ENDIF()
 
   # Check to see if H5Dread_chunk is available
@@ -930,6 +930,20 @@ IF(USE_HDF5)
   ELSE(NOT HAVE_HDF5_H)
     INCLUDE_DIRECTORIES(${HAVE_HDF5_H})
   ENDIF(NOT HAVE_HDF5_H)
+
+  # Check to ensure that HDF5 was built with zlib.
+  set (CMAKE_REQUIRED_INCLUDES ${HDF5_INCLUDE_DIR})
+
+
+  CHECK_C_SOURCE_COMPILES("#include <H5pulic.h>
+   #if !H5_HAVE_ZLIB_H
+   #error
+   #endif
+   int main() {
+   int x = 1;}" HAVE_HDF5_ZLIB)
+  IF(NOT HAVE_HDF5_ZLIB)
+    MESSAGE(FATAL_ERROR "HDF5 was built without zlib. Rebuild HDF5 with zlib.")
+  ENDIF()
 
   #option to include HDF5 High Level header file (hdf5_hl.h) in case we are not doing a make install
   INCLUDE_DIRECTORIES(${HDF5_HL_INCLUDE_DIR})
@@ -1491,12 +1505,12 @@ IF(NOT BUILD_SHARED_LIBS)
 ENDIF()
 
 OPTION(ENABLE_NCZARR_FILTERS "Enable NCZarr filters" yes)
-IF (NOT ENABLE_PLUGINS) 
+IF (NOT ENABLE_PLUGINS)
     SET(ENABLE_NCZARR_FILTERS OFF CACHE BOOL "Enable NCZarr Filters." FORCE)
 ENDIF()
 
 OPTION(ENABLE_NCZARR_FILTERS_TESTING "Enable NCZarr filter testing." yes)
-IF (NOT ENABLE_NCZARR_FILTERS) 
+IF (NOT ENABLE_NCZARR_FILTERS)
     SET(ENABLE_NCZARR_FILTER_TESTING OFF CACHE BOOL "Enable NCZarr Filter Testing" FORCE)
 ENDIF()
 
@@ -2177,6 +2191,12 @@ IF(BUILD_UTILITIES)
 ENDIF()
 
 # Enable tests
+
+# add MPI_C_LIBRARIES for parallel testing
+if (TEST_PARALLEL4 and ${MPI_C_FOUND})
+    list(APPEND ALL_TLL_LIBS ${MPI_C_LIBRARIES})
+endif()
+
 IF(ENABLE_TESTS)
   IF(ENABLE_V2_API)
     ADD_SUBDIRECTORY(nctest)
