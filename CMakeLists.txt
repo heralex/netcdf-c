@@ -9,6 +9,8 @@
 #Minimum required CMake Version
 cmake_minimum_required(VERSION 3.6.1)
 
+cmake_policy(SET CMP0074 NEW)
+
 #Project Name
 project(netCDF LANGUAGES C CXX)
 set(PACKAGE "netCDF" CACHE STRING "")
@@ -645,6 +647,7 @@ IF(USE_HDF5)
     # examples, even though the previous version of what we
     # had worked.
     #####
+    
     IF(MSVC)
       SET(SEARCH_PACKAGE_NAME ${HDF5_PACKAGE_NAME})
       FIND_PACKAGE(HDF5 NAMES ${SEARCH_PACKAGE_NAME} COMPONENTS C HL CONFIG REQUIRED ${NC_HDF5_LINK_TYPE})
@@ -830,7 +833,7 @@ IF(USE_HDF5)
   set (CMAKE_REQUIRED_INCLUDES ${HDF5_INCLUDE_DIR})
 
 
-  CHECK_C_SOURCE_COMPILES("#include <H5public.h>
+  CHECK_C_SOURCE_COMPILES("#include <H5pubconf.h>
    #if !H5_HAVE_ZLIB_H
    #error
    #endif
@@ -1924,6 +1927,13 @@ SET(netCDF_LIB_CORENAME  "netcdf")
 # Set the true names of all the libraries, if customized by external project
 #####
 # Recurse into other subdirectories.
+
+if (STATUS_PARALLEL)
+    include_directories("/usr/include/x86_64-linux-gnu/mpich")
+    list(APPEND ALL_TLL_LIBS mpich)
+    SET(PAR_LINK_LIB mpich)
+endif()
+
 add_subdirectory("include")
 add_subdirectory(libdispatch)
 add_subdirectory(libsrc)
@@ -1993,12 +2003,12 @@ IF(ENABLE_TESTS)
     ADD_SUBDIRECTORY(nc_test4)
     ADD_SUBDIRECTORY(h5_test)
   ENDIF()
-  IF(ENABLE_DAP2)
-    ADD_SUBDIRECTORY(ncdap_test)
-  ENDIF()
-  IF(ENABLE_DAP4)
-    ADD_SUBDIRECTORY(dap4_test)
-  ENDIF()
+  #IF(ENABLE_DAP2)
+  #  ADD_SUBDIRECTORY(ncdap_test)
+  #ENDIF()
+  #IF(ENABLE_DAP4)
+  #  ADD_SUBDIRECTORY(dap4_test)
+  #ENDIF()
   IF(ENABLE_EXAMPLES)
     ADD_SUBDIRECTORY(examples)
   ENDIF()
