@@ -131,17 +131,24 @@ verifychunks(void)
 static int
 create(void)
 {
-    int i;
-
     /* Create a file with one big variable, but whose dimensions arte not a multiple of chunksize (to see what happens) */
     CHECK(nc_create(testfile, NC_NETCDF4|NC_CLOBBER, &ncid));
     CHECK(nc_set_fill(ncid, NC_NOFILL, NULL));
+    return NC_NOERR;
+}
+
+static int
+defvar(nc_type xtype)
+{
+    int i;
+
+    /* Create a file with one big variable, but whose dimensions arte not a multiple of chunksize (to see what happens) */
     for(i=0;i<ndims;i++) {
         char dimname[1024];
         snprintf(dimname,sizeof(dimname),"dim%d",i);
         CHECK(nc_def_dim(ncid, dimname, dimsize[i], &dimids[i]));
     }
-    CHECK(nc_def_var(ncid, "var", NC_FLOAT, ndims, dimids, &varid));
+    CHECK(nc_def_var(ncid, "var", xtype, ndims, dimids, &varid));
     return NC_NOERR;
 }
 
@@ -370,6 +377,7 @@ test_test1(void)
 
     fprintf(stderr,"test1: compression.\n");
     create();
+    defvar(NC_FLOAT);
     setchunking();
     setvarfilter();
     showparameters();
@@ -401,6 +409,7 @@ test_test2(void)
 
     fprintf(stderr,"test2: dimsize %% chunksize != 0: compress.\n");
     create();
+    defvar(NC_FLOAT);
     setchunking();
     setvarfilter();
     showparameters();
@@ -433,6 +442,7 @@ test_test3(void)
 
     fprintf(stderr,"test3: dimsize %% chunksize != 0: compress.\n");
     create();
+    defvar(NC_FLOAT);
     setchunking();
     setvarfilter();
     showparameters();

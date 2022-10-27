@@ -99,7 +99,10 @@ genc_netcdf(void)
             if(special->flags & _CHUNKSIZES_FLAG) {
                 int i;
                 size_t* chunks = special->_ChunkSizes;
-                if(special->nchunks == 0 || chunks == NULL) continue;
+                if(special->nchunks == 0 || chunks == NULL) {
+                    bbFree(tmp);
+                    continue;
+                }
                 bbClear(tmp);
                 for(i=0;i<special->nchunks;i++) {
                     bbprintf(tmp,"%s%ld",
@@ -539,7 +542,7 @@ genc_definespecialattributes(Symbol* vsym)
             codelined(1,"CHECK_ERR(stat);");
 	}
     }
-    if(special->flags & (_QUANTIZEBG_FLAG | _QUANTIZEBR_FLAG)) {
+    if(special->flags & (_QUANTIZEBG_FLAG | _QUANTIZEGBR_FLAG)) {
     	const char* alg = NULL;
 	switch(special->_Quantizer) {
 	case NC_QUANTIZE_BITGROOM: alg = "NC_QUANTIZE_BITGROOM";

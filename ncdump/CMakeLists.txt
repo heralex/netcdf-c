@@ -17,6 +17,7 @@ SET(ocprint_FILES ocprint.c)
 SET(ncvalidator_FILES ncvalidator.c)
 SET(printfqn_FILES printfqn.c)
 SET(ncpathcvt_FILES ncpathcvt.c)
+SET(ncfilteravail_FILES ncfilteravail.c)
 SET(nchdf5version_FILES nchdf5version.c)
 
 IF(USE_X_GETOPT)
@@ -26,12 +27,14 @@ IF(USE_X_GETOPT)
   SET(ncvalidator_FILES ${ncvalidator_FILES} XGetopt.c)
   SET(printfqn_FILES ${printfqn_FILES} XGetopt.c)
   SET(ncpathcvt_FILES ${ncpathcvt_FILES} XGetopt.c)
+  SET(ncfilteravail_FILES ${ncfilteravail_FILES} XGetopt.c)
 ENDIF(USE_X_GETOPT)
 
 ADD_EXECUTABLE(ncdump ${ncdump_FILES})
 ADD_EXECUTABLE(nccopy ${nccopy_FILES})
 ADD_EXECUTABLE(ncvalidator ${ncvalidator_FILES})
 ADD_EXECUTABLE(ncpathcvt ${ncpathcvt_FILES})
+ADD_EXECUTABLE(ncfilteravail ${ncfilteravail_FILES})
 
 IF(USE_HDF5)
   ADD_EXECUTABLE(nc4print nc4print.c nc4printer.c)
@@ -47,6 +50,7 @@ TARGET_LINK_LIBRARIES(ncdump netcdf ${ALL_TLL_LIBS})
 TARGET_LINK_LIBRARIES(nccopy netcdf ${ALL_TLL_LIBS})
 TARGET_LINK_LIBRARIES(ncvalidator netcdf ${ALL_TLL_LIBS})
 TARGET_LINK_LIBRARIES(ncpathcvt netcdf ${ALL_TLL_LIBS})
+TARGET_LINK_LIBRARIES(ncfilteravail netcdf ${ALL_TLL_LIBS})
 
 IF(USE_HDF5)
   TARGET_LINK_LIBRARIES(nc4print netcdf ${ALL_TLL_LIBS})
@@ -64,58 +68,32 @@ ENDIF(ENABLE_DAP)
 # in MSVC builds.  This is required to get
 # test scripts to work.
 ####
+
 IF(MSVC)
-  SET_TARGET_PROPERTIES(ncdump PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-    ${CMAKE_CURRENT_BINARY_DIR})
-  SET_TARGET_PROPERTIES(ncdump PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
-    ${CMAKE_CURRENT_BINARY_DIR})
-  SET_TARGET_PROPERTIES(ncdump PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
-    ${CMAKE_CURRENT_BINARY_DIR})
+  macro(setbinprops name)
+    SET_TARGET_PROPERTIES(${name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY
+      ${CMAKE_CURRENT_BINARY_DIR})
+    SET_TARGET_PROPERTIES(${name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
+      ${CMAKE_CURRENT_BINARY_DIR})
+    SET_TARGET_PROPERTIES(${name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
+      ${CMAKE_CURRENT_BINARY_DIR})
+  endmacro()
 
-  SET_TARGET_PROPERTIES(nccopy PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-    ${CMAKE_CURRENT_BINARY_DIR})
-  SET_TARGET_PROPERTIES(nccopy PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
-    ${CMAKE_CURRENT_BINARY_DIR})
-  SET_TARGET_PROPERTIES(nccopy PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
-    ${CMAKE_CURRENT_BINARY_DIR})
-
-  SET_TARGET_PROPERTIES(ncvalidator PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-    ${CMAKE_CURRENT_BINARY_DIR})
-  SET_TARGET_PROPERTIES(ncvalidator PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
-    ${CMAKE_CURRENT_BINARY_DIR})
-  SET_TARGET_PROPERTIES(ncvalidator PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
-    ${CMAKE_CURRENT_BINARY_DIR})
-
-  SET_TARGET_PROPERTIES(ncpathcvt PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-    ${CMAKE_CURRENT_BINARY_DIR})
-  SET_TARGET_PROPERTIES(ncpathcvt PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
-    ${CMAKE_CURRENT_BINARY_DIR})
-  SET_TARGET_PROPERTIES(ncpathcvt PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
-    ${CMAKE_CURRENT_BINARY_DIR})
+  setbinprops(ncdump)
+  setbinprops(nccopy)
+  setbinprops(ncvalidator)
+  setbinprops(ncpathcvt)
+  setbinprops(ncfilteravail)
 
   IF(USE_HDF5)
-    SET_TARGET_PROPERTIES(printfqn PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-      ${CMAKE_CURRENT_BINARY_DIR})
-    SET_TARGET_PROPERTIES(printfqn PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
-      ${CMAKE_CURRENT_BINARY_DIR})
-    SET_TARGET_PROPERTIES(printfqn PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
-      ${CMAKE_CURRENT_BINARY_DIR})
-    SET_TARGET_PROPERTIES(nchdf5version PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-      ${CMAKE_CURRENT_BINARY_DIR})
-    SET_TARGET_PROPERTIES(nchdf5version PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
-      ${CMAKE_CURRENT_BINARY_DIR})
-    SET_TARGET_PROPERTIES(nchdf5version PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
-      ${CMAKE_CURRENT_BINARY_DIR})
+    setbinprops(printfqn)
+    setbinprops(nchdf5version)
   ENDIF(USE_HDF5)
 
   IF(ENABLE_DAP)
-    SET_TARGET_PROPERTIES(ocprint PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-      ${CMAKE_CURRENT_BINARY_DIR})
-    SET_TARGET_PROPERTIES(ocprint PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
-      ${CMAKE_CURRENT_BINARY_DIR})
-    SET_TARGET_PROPERTIES(ocprint PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
-      ${CMAKE_CURRENT_BINARY_DIR})
+    setbinprops(ocprint)
   ENDIF(ENABLE_DAP)
+
 
 ENDIF()
 
@@ -127,6 +105,7 @@ IF(ENABLE_TESTS)
   ADD_EXECUTABLE(nctrunc nctrunc.c)
 if(RCMERGE)
   ADD_EXECUTABLE(tst_rcmerge tst_rcmerge.c)
+  ADD_EXECUTABLE(tst_rcmerge tst_rcapi.c)
 endif()
   TARGET_LINK_LIBRARIES(rewrite-scalar netcdf)
   TARGET_LINK_LIBRARIES(bom netcdf)
@@ -134,6 +113,7 @@ endif()
   TARGET_LINK_LIBRARIES(nctrunc netcdf)
 if(RCMERGE)
   TARGET_LINK_LIBRARIES(tst_rcmerge netcdf)
+  TARGET_LINK_LIBRARIES(tst_rcapi netcdf)
 endif()
 
   IF(USE_HDF5)
@@ -176,6 +156,11 @@ endif()
         SET_TARGET_PROPERTIES(tst_rcmerge PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
           ${CMAKE_CURRENT_BINARY_DIR})
         SET_TARGET_PROPERTIES(tst_rcmerge PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
+        SET_TARGET_PROPERTIES(tst_rcapi PROPERTIES RUNTIME_OUTPUT_DIRECTORY
+          ${CMAKE_CURRENT_BINARY_DIR})
+        SET_TARGET_PROPERTIES(tst_rcapi PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
+          ${CMAKE_CURRENT_BINARY_DIR})
+        SET_TARGET_PROPERTIES(tst_rcapi PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
     endif()
 
     IF(USE_HDF5)
@@ -195,10 +180,10 @@ endif()
   IF(USE_HDF5)
     build_bin_test_no_prefix(tst_h_rdc0)
     build_bin_test_no_prefix(tst_unicode)
+    build_bin_test_no_prefix(tst_vlen_data)
     add_bin_test_no_prefix(tst_create_files)
     add_bin_test_no_prefix(tst_opaque_data)
     add_bin_test_no_prefix(tst_string_data)
-    add_bin_test_no_prefix(tst_vlen_data)
     add_bin_test_no_prefix(tst_comp2)
     add_bin_test_no_prefix(tst_nans)
     add_bin_test_no_prefix(tst_h_scalar)
@@ -206,6 +191,7 @@ endif()
     add_bin_test_no_prefix(tst_chunking)
     add_bin_test_no_prefix(tst_group_data)
     add_bin_test_no_prefix(tst_enum_data)
+    add_bin_test_no_prefix(tst_enum_undef)
     add_bin_test_no_prefix(tst_comp)
     # Add this test by hand, as it is also called from a script.
     # Editing the script would break autotools compatibility.
@@ -278,7 +264,7 @@ endif()
     add_sh_test(ncdump tst_netcdf4_4)
     add_sh_test(ncdump tst_nccopy4)
 
-    SET_TESTS_PROPERTIES(ncdump_tst_nccopy4 PROPERTIES DEPENDS "ncdump_run_ncgen_tests;ncdump_tst_output;ncdump_tst_ncgen4;ncdump_tst_fillbug;ncdump_tst_netcdf4_4;ncdump_tst_h_scalar;tst_comp;tst_comp2")
+    SET_TESTS_PROPERTIES(ncdump_tst_nccopy4 PROPERTIES DEPENDS "ncdump_run_ncgen_tests;ncdump_tst_output;ncdump_tst_ncgen4;ncdump_sh_tst_fillbug;ncdump_tst_netcdf4_4;ncdump_tst_h_scalar;tst_comp;tst_comp2;tst_nans;tst_opaque_data;tst_create_files;tst_special_atts")
     SET_TESTS_PROPERTIES(ncdump_tst_nccopy5 PROPERTIES DEPENDS "ncdump_tst_nccopy4")
 
   ENDIF(USE_HDF5)
@@ -304,14 +290,11 @@ endif()
       ENDIF()
   ENDIF(EXTRA_TESTS)
 
-  # The unicode tests are complicated
-  IF(USE_HDF5)
-      IF(NOT MSVC AND NOT MINGW)
-        # These tests do not work under windows
-        add_sh_test(ncdump test_unicode_directory)
-        add_sh_test(ncdump test_unicode_path)
-      ENDIF()
-  ENDIF(USE_HDF5)
+  # The unicode tests
+  if(NOT ISMINGW)
+    add_sh_test(ncdump test_unicode_directory)
+    add_sh_test(ncdump test_unicode_path)
+  ENDIF()
 
   IF(USE_CDF5)
     add_sh_test(ncdump test_keywords)

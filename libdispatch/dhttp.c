@@ -22,7 +22,9 @@
 #include "nclog.h"
 #include "ncbytes.h"
 #include "nclist.h"
+#include "ncuri.h"
 #include "nchttp.h"
+#include "ncauth.h"
 
 #undef TRACE
 
@@ -276,7 +278,7 @@ Assume URL etc has already been set.
 */
 
 int
-nc_http_size(NC_HTTP_STATE* state, const char* objecturl, long long unsigned* sizep)
+nc_http_size(NC_HTTP_STATE* state, const char* objecturl, long long* sizep)
 {
     int stat = NC_NOERR;
     const char* hdr = NULL;
@@ -481,6 +483,25 @@ setupconn(NC_HTTP_STATE* state, const char* objecturl)
     if (cstat != CURLE_OK) goto fail;
     cstat = curl_easy_setopt(state->curl, CURLOPT_FOLLOWLOCATION, 1); 
     if (cstat != CURLE_OK) goto fail;
+
+    /* Pull some values from .rc tables */
+    {
+	NCURI* uri = NULL;
+	char* hostport = NULL;
+	char* value = NULL;
+	ncuriparse(objecturl,&uri);
+	if(uri == NULL) goto fail;
+	hostport = NC_combinehostport(uri);
+	ncurifree(uri); uri = NULL;
+	value = NC_rclookup("HTTP.SSL.CAINFO",hostport,NULL);
+	nullfree(hostport); hostport = NULL;	
+	if(value == NULL)
+	    value = NC_rclookup("HTTP.SSL.CAINFO",NULL,NULL);
+	if(value != NULL) {
+	    cstat = CURLERR(curl_easy_setopt(state->curl, CURLOPT_CAINFO, value));
+	    if (cstat != CURLE_OK) goto fail;
+	}
+    }
 
     /* Set the method */
     if((stat = nc_http_set_method(state,state->request.method))) goto done;

@@ -85,9 +85,9 @@ nc4_reopen_dataset(NC_GRP_INFO_T *grp, NC_VAR_INFO_T *var)
 
         if ((access_pid = H5Pcreate(H5P_DATASET_ACCESS)) < 0)
             return NC_EHDFERR;
-        if (H5Pset_chunk_cache(access_pid, var->chunk_cache_nelems,
-                               var->chunk_cache_size,
-                               var->chunk_cache_preemption) < 0)
+        if (H5Pset_chunk_cache(access_pid, var->chunkcache.nelems,
+                               var->chunkcache.size,
+                               var->chunkcache.preemption) < 0)
             return NC_EHDFERR;
         if (H5Dclose(hdf5_var->hdf_datasetid) < 0)
             return NC_EHDFERR;
@@ -533,31 +533,30 @@ nc_def_var_extra(int ncid, int varid, int *shuffle, int *unused1,
     }
 
     /* Shuffle filter? */
-    if (shuffle)
-    {
-        if(*shuffle) var->shuffle = *shuffle; /* Once set, cannot be unset */
-	if(var->shuffle)
-            var->storage = NC_CHUNKED;
+    if (shuffle && *shuffle) {
+	    retval = nc_inq_var_filter_info(ncid,varid,H5Z_FILTER_SHUFFLE,NULL,NULL);
+	    if(!retval || retval == NC_ENOFILTER) {
+	        if((retval = nc_def_var_filter(ncid,varid,H5Z_FILTER_SHUFFLE,0,NULL))) return retval;
+                var->storage = NC_CHUNKED;
+	    }
     }
 
     /* Fletcher32 checksum error protection? */
-    if (fletcher32)
-    {
-        if(*fletcher32) var->fletcher32 = *fletcher32; /* cannot be unset */
-	if(var->fletcher32)
+    if (fletcher32 && *fletcher32) {
+	retval = nc_inq_var_filter_info(ncid,varid,H5Z_FILTER_FLETCHER32,NULL,NULL);
+	if(!retval || retval == NC_ENOFILTER) {
+	    if((retval = nc_def_var_filter(ncid,varid,H5Z_FILTER_FLETCHER32,0,NULL))) return retval;
             var->storage = NC_CHUNKED;
+	    }
     }
 
 #ifdef USE_PARALLEL
-    /* If deflate, shuffle, or fletcher32 was turned on with
+    /* If filter is being applied with
      * parallel I/O writes, then switch to collective access. HDF5
      * requires collevtive access for filter use with parallel
      * I/O. */
-    if (shuffle || fletcher32)
-    {
-        if (h5->parallel && (nclistlength((NClist*)var->filters) > 0 || var->shuffle || var->fletcher32))
+    if (h5->parallel && (nclistlength((NClist*)var->filters) > 0))
             var->parallel_access = NC_COLLECTIVE;
-    }
 #endif /* USE_PARALLEL */
 
     /* Handle storage settings. */
@@ -568,7 +567,7 @@ nc_def_var_extra(int ncid, int varid, int *shuffle, int *unused1,
          * no filters in use for this data. */
         if (*storage != NC_CHUNKED)
         {
-            if (nclistlength(((NClist*)var->filters)) > 0 || var->fletcher32 || var->shuffle)
+            if (nclistlength(((NClist*)var->filters)) > 0)
                 return NC_EINVAL;
 	    for (d = 0; d < var->ndims; d++)
                 if (var->dim[d]->unlimited)
@@ -716,36 +715,54 @@ nc_def_var_extra(int ncid, int varid, int *shuffle, int *unused1,
     }
 
     /* Remember quantization settings. They will be used when data are
-     * written. */
+     * written.
+     * Code block is identical to one in zvar.c---consider functionalizing */
     if (quantize_mode)
     {
-	/* Only two valid mode settings. */
+	/* Only four valid mode settings. */
 	if (*quantize_mode != NC_NOQUANTIZE &&
 	    *quantize_mode != NC_QUANTIZE_BITGROOM &&
-	    *quantize_mode != NC_QUANTIZE_GRANULARBR)
+	    *quantize_mode != NC_QUANTIZE_GRANULARBR &&
+	    *quantize_mode != NC_QUANTIZE_BITROUND)
 	    return NC_EINVAL;
 
-	if (*quantize_mode == NC_QUANTIZE_BITGROOM || *quantize_mode == NC_QUANTIZE_GRANULARBR)
+	if (*quantize_mode == NC_QUANTIZE_BITGROOM ||
+	    *quantize_mode == NC_QUANTIZE_GRANULARBR ||
+	    *quantize_mode == NC_QUANTIZE_BITROUND)
 	{
 	    /* Only float and double types can have quantization. */
 	    if (var->type_info->hdr.id != NC_FLOAT &&
 		var->type_info->hdr.id != NC_DOUBLE)
 		return NC_EINVAL;
 	    
-	    /* For bitgroom, number of significant digits is required. */
+	    
+	    /* All quantization codecs require number of significant digits */
 	    if (!nsd)
 		return NC_EINVAL;
 
 	    /* NSD must be in range. */
 	    if (*nsd <= 0)
 		return NC_EINVAL;
-	    if (var->type_info->hdr.id == NC_FLOAT &&
-		*nsd > NC_QUANTIZE_MAX_FLOAT_NSD)
-		return NC_EINVAL;
-	    if (var->type_info->hdr.id == NC_DOUBLE &&
-		*nsd > NC_QUANTIZE_MAX_DOUBLE_NSD)
-		return NC_EINVAL;
 
+	    if (*quantize_mode == NC_QUANTIZE_BITGROOM ||
+		*quantize_mode == NC_QUANTIZE_GRANULARBR)
+	      { 
+		if (var->type_info->hdr.id == NC_FLOAT &&
+		    *nsd > NC_QUANTIZE_MAX_FLOAT_NSD)
+		  return NC_EINVAL;
+		if (var->type_info->hdr.id == NC_DOUBLE &&
+		    *nsd > NC_QUANTIZE_MAX_DOUBLE_NSD)
+		  return NC_EINVAL;
+	      }
+	    else if (*quantize_mode == NC_QUANTIZE_BITROUND)
+	      {
+		if (var->type_info->hdr.id == NC_FLOAT &&
+		    *nsd > NC_QUANTIZE_MAX_FLOAT_NSB)
+		  return NC_EINVAL;
+		if (var->type_info->hdr.id == NC_DOUBLE &&
+		    *nsd > NC_QUANTIZE_MAX_DOUBLE_NSB)
+		  return NC_EINVAL;
+	      }
 	    var->nsd = *nsd;
 	}
 	
@@ -813,12 +830,25 @@ NC4_def_var_deflate(int ncid, int varid, int shuffle, int deflate,
  * error.)
  *
  * When quantize is turned on, and the number of significant digits
- * has been specified, then the netCDF library will quantize according
- * to the selected algorithm. BitGroom will apply all zeros or
- * all ones (alternating) to bits which are not needed to specify the
- * value to the number of significant digits. GranularBR will zero
- * more bits than BG, and thus be more compressible and less accurate.
- * Both will change the value of the data, and will make it more compressible.
+ * (NSD) has been specified, then the netCDF library will quantize according
+ * to the selected algorithm. BitGroom interprets NSD as decimal digits
+ * will apply all zeros or all ones (alternating) to bits which are not 
+ * needed to specify the value to the number of significant decimal digits. 
+ * BitGroom retain the same number of bits for all values of a variable. 
+ * BitRound (BR) interprets NSD as binary digits (i.e., bits) and keeps the
+ * the user-specified number of significant bits then rounds the result
+ * to the nearest representable number according to IEEE rounding rules.
+ * BG and BR both retain a uniform number of significant bits for all 
+ * values of a variable. Granular BitRound interprest NSD as decimal
+ * digits. GranularBR determines the number of bits to necessary to 
+ * retain the user-specified number of significant digits individually
+ * for every value of the variable. GranularBR then applies the BR
+ * quantization algorithm on a granular, value-by-value, rather than
+ * uniformly for the entire variable. GranularBR quantizes more bits
+ * than BG, and is thus more compressive and less accurate than BG.
+ * BR knows bits and makes no guarantees about decimal precision.
+ * All quantization algorithms change the values of the data, and make 
+ * it more compressible.
  *
  * Quantizing the data does not reduce the size of the data on disk,
  * but combining quantize with compression will allow for better
@@ -830,10 +860,10 @@ NC4_def_var_deflate(int ncid, int varid, int shuffle, int deflate,
  * size.
  *
  * Variables which use quantize will have added an attribute with name
- * ::NC_QUANTIZE_[ALG_NAME]_ATT_NAME, which will contain the number of
- * significant digits. Users should not delete or change this
- * attribute. This is the only record that quantize has been applied
- * to the data.
+ * ::NC_QUANTIZE_BITGROOM_ATT_NAME, ::NC_QUANTIZE_GRANULARBR_ATT_NAME, 
+ * or ::NC_QUANTIZE_BITROUND_ATT_NAME that contains the number of 
+ * significant digits. Users should not delete or change this attribute. 
+ * This is the only record that quantize has been applied to the data.
  *
  * As with the deflate settings, quantize settings may only be
  * modified before the first call to nc_enddef(). Once nc_enddef() is
@@ -848,10 +878,15 @@ NC4_def_var_deflate(int ncid, int varid, int shuffle, int deflate,
  * @param ncid File ID.
  * @param varid Variable ID. NC_GLOBAL may not be used.
  * @param quantize_mode Quantization mode. May be ::NC_NOQUANTIZE or
- * ::NC_QUANTIZE_BITGROOM or ::NC_QUANTIZE_GRANULARBR.
- * @param nsd Number of significant digits. May be any integer from 1
- * to ::NC_QUANTIZE_MAX_FLOAT_NSD (for variables of type ::NC_FLOAT) or
- * ::NC_QUANTIZE_MAX_DOUBLE_NSD (for variables of type ::NC_DOUBLE).
+ * ::NC_QUANTIZE_BITGROOM, ::NC_QUANTIZE_BITROUND or ::NC_QUANTIZE_GRANULARBR.
+ * @param nsd Number of significant digits (either decimal or binary). 
+ * May be any integer from 1 to ::NC_QUANTIZE_MAX_FLOAT_NSD (for variables 
+ * of type ::NC_FLOAT) or ::NC_QUANTIZE_MAX_DOUBLE_NSD (for variables 
+ * of type ::NC_DOUBLE) for mode ::NC_QUANTIZE_BITGROOM and mode
+ * ::NC_QUANTIZE_GRANULARBR. May be any integer from 1 to 
+ * ::NC_QUANTIZE_MAX_FLOAT_NSB (for variables of type ::NC_FLOAT) or 
+ * ::NC_QUANTIZE_MAX_DOUBLE_NSB (for variables of type ::NC_DOUBLE) 
+ * for mode ::NC_QUANTIZE_BITROUND.
  *
  * @returns ::NC_NOERR No error.
  * @returns ::NC_EBADID Bad ncid.
@@ -1663,9 +1698,9 @@ NC4_put_vars(int ncid, int varid, const size_t *startp, const size_t *countp,
         BAIL(retval);
 #endif
 
-    /* Read this hyperslab from memory. Does the dataset have to be
-       extended? If it's already extended to the required size, it will
-       do no harm to reextend it to that size. */
+    /* Does the dataset have to be extended? If it's already extended
+       to the required size, it will do no harm to reextend it to that
+       size. */
     if (var->ndims)
     {
         for (d2 = 0; d2 < var->ndims; d2++)
@@ -1684,15 +1719,10 @@ NC4_put_vars(int ncid, int varid, const size_t *startp, const size_t *countp,
                 {
                     xtend_size[d2] = (long long unsigned)(endindex + 1);
                     need_to_extend++;
+                    dim->extended = NC_TRUE;
                 }
                 else
                     xtend_size[d2] = (long long unsigned)fdims[d2];
-
-                if (!zero_count && endindex >= dim->len)
-                {
-                    dim->len = endindex + 1;
-                    dim->extended = NC_TRUE;
-                }
             }
             else
             {
@@ -1850,6 +1880,9 @@ NC4_get_vars(int ncid, int varid, const size_t *startp, const size_t *countp,
     void *bufr = NULL;
     int need_to_convert = 0;
     size_t len = 1;
+    int fixedlengthstring = 0;
+    hsize_t fstring_len = 0;
+    size_t fstring_count = 1;
 
     /* Find info for this file, group, and var. */
     if ((retval = nc4_hdf5_find_grp_h5_var(ncid, varid, &h5, &grp, &var)))
@@ -2038,14 +2071,21 @@ NC4_get_vars(int ncid, int varid, const size_t *startp, const size_t *countp,
             H5Tget_size(hdf5_type->hdf_typeid) > 1 &&
             !H5Tis_variable_str(hdf5_type->hdf_typeid))
         {
-            hsize_t fstring_len;
+	    size_t k;
 
             if ((fstring_len = H5Tget_size(hdf5_type->hdf_typeid)) == 0)
                 BAIL(NC_EHDFERR);
-            if (!(*(char **)data = malloc(1 + fstring_len)))
-                BAIL(NC_ENOMEM);
-            bufr = *(char **)data;
-        }
+	    /* Compute the total number of strings to read */
+            if (var->ndims) {
+                for (k = 0; k < var->ndims; k++) {
+                    fstring_count *= countp[k];
+		}
+	    }
+	    /* Allocate space for the all the strings */
+            if (!(bufr = malloc(fstring_len*fstring_count)))
+                    BAIL(NC_ENOMEM);
+	    fixedlengthstring = 1;
+	}
 
         /* Create the data transfer property list. */
         if ((xfer_plistid = H5Pcreate(H5P_DATASET_XFER)) < 0)
@@ -2098,6 +2138,24 @@ NC4_get_vars(int ncid, int varid, const size_t *startp, const size_t *countp,
         }
 #endif /* USE_PARALLEL4 */
     }
+
+    /* If we read a sequence of fixed length strings, then we need to convert to char* in memory */
+    if(fixedlengthstring) {
+	size_t k;
+	char** strvec = (char**)data;
+	char* p;
+	for(k=0;k < fstring_count;k++) {
+	    char* eol;
+	    if((p = (char*)malloc(1+fstring_len))==NULL) BAIL(NC_ENOMEM);
+	    memcpy(p,((char*)bufr)+(k*fstring_len),fstring_len);
+	    eol = p + fstring_len;
+	    *eol = '\0';
+	    strvec[k] = p; p = NULL;
+	}
+	free(bufr);
+	bufr = NULL;
+    }
+
     /* Now we need to fake up any further data that was asked for,
        using the fill values instead. First skip past the data we
        just read, if any. */
@@ -2177,6 +2235,7 @@ NC4_get_vars(int ncid, int varid, const size_t *startp, const size_t *countp,
     }
     
 exit:
+    if(fixedlengthstring && bufr) free(bufr);
     if (file_spaceid > 0)
         if (H5Sclose(file_spaceid) < 0)
             BAIL2(NC_EHDFERR);
@@ -2314,9 +2373,9 @@ NC4_HDF5_set_var_chunk_cache(int ncid, int varid, size_t size, size_t nelems,
     assert(var && var->hdr.id == varid);
 
     /* Set the values. */
-    var->chunk_cache_size = size;
-    var->chunk_cache_nelems = nelems;
-    var->chunk_cache_preemption = preemption;
+    var->chunkcache.size = size;
+    var->chunkcache.nelems = nelems;
+    var->chunkcache.preemption = preemption;
 
     /* Reopen the dataset to bring new settings into effect. */
     if ((retval = nc4_reopen_dataset(grp, var)))

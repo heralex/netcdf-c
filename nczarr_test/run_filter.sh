@@ -12,7 +12,6 @@ testset() {
 testapi $1
 testng $1
 testncp $1
-testunk $1
 testngc $1
 testmisc $1
 testmulti $1
@@ -48,20 +47,22 @@ sed -e 's/[ 	]*\([^ 	].*\)/\1/' <$1 >$2
 }
 
 # Locate the plugin path and the library names; argument order is critical
+
+# Find misc and capture
+findplugin h5misc
+MISCLIB="${HDF5_PLUGIN_LIB}"
+MISCDIR="${HDF5_PLUGIN_DIR}"
+MISCPATH="${MISCDIR}/${MISCLIB}"
+
 # Find bzip2 and capture
 findplugin h5bzip2
 BZIP2LIB="${HDF5_PLUGIN_LIB}"
-BZIP2PATH="${HDF5_PLUGIN_PATH}/${BZIP2LIB}"
-# Find misc and capture
-findplugin h5misc
-MISCPATH="${HDF5_PLUGIN_PATH}/${HDF5_PLUGIN_LIB}"
+BZIP2DIR="${HDF5_PLUGIN_DIR}"
+BZIP2PATH="${BZIP2DIR}/${BZIP2LIB}"
 
 # Verify
-if ! test -f ${BZIP2PATH} ; then echo "Unable to locate ${BZIP2PATH}"; exit 1; fi
+if ! test -f ${BZIP2path} ; then echo "Unable to locate ${BZIP2PATH}"; exit 1; fi
 if ! test -f ${MISCPATH} ; then echo "Unable to locate ${MISCPATH}"; exit 1; fi
-
-echo "@@@@@@@@@@@"
-find ${HDF5_PLUGIN_PATH}
 
 # Execute the specified tests
 
@@ -128,29 +129,6 @@ diff -b -w ${srcdir}/ref_filtered.cdl ./tmp_ncp_$zext.dump
 echo "	*** Pass: nccopy simple filter for map $zext"
 }
 
-testunk() {
-zext=$1	
-echo "*** Testing access to filter info when filter implementation is not available for map $zext"
-fileargs tmp_known
-deletemap $zext $file
-# build bzip2.nc
-${NCGEN} -lb -4 -o $fileurl ${srcdir}/../nc_test4/bzip2.cdl
-# dump and clean bzip2.nc header when filter is avail
-${NCDUMP} -hs $fileurl > ./tmp_known_$zext.txt
-# Remove irrelevant -s output
-sclean ./tmp_known_$zext.txt tmp_known_$zext.dump
-# Now hide the filter code
-mv ${BZIP2PATH} ./${BZIP2LIB}.save
-# dump and clean bzip2.nc header when filter is not avail
-${NCDUMP} -hs $fileurl > ./tmp_unk_$zext.txt
-# Restore the filter code
-mv ./${BZIP2LIB}.save ${BZIP2PATH}
-# Verify that the filter is no longer defined
-UNK=`sed -e '/var:_Filter/p' -e d ./tmp_unk_$zext.txt`
-test "x$UNK" = x
-echo "*** Pass: ncgen dynamic filter for map $zext"
-}
-
 testngc() {
 zext=$1	
 echo "*** Testing dynamic filters using ncgen with -lc for map $zext"
@@ -167,7 +145,7 @@ echo "*** Testing multiple filters for map $zext"
 fileargs tmp_multi
 deletemap $zext $file
 ${execdir}/testfilter_multi $fileurl
-${NCDUMP} -hs -n multifilter $fileurl >./tmp_multi_$zext.cdl
+${NCDUMP} -hsF -n multifilter $fileurl >./tmp_multi_$zext.cdl
 # Remove irrelevant -s output
 sclean ./tmp_multi_$zext.cdl ./tmp_smulti_$zext.cdl
 diff -b -w ${srcdir}/ref_multi.cdl ./tmp_smulti_$zext.cdl

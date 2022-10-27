@@ -139,6 +139,7 @@ struct Specialtoken specials[] = {
 {"_Filter",_FILTER,_FILTER_FLAG},
 {"_Codecs",_CODECS,_CODECS_FLAG},
 {"_QuantizeBitGroomNumberOfSignificantDigits",_QUANTIZEBG,_QUANTIZEBG_FLAG},
+{"_QuantizeGranularBitRoundNumberOfSignificantDigits",_QUANTIZEGBR,_QUANTIZEGBR_FLAG},
 {"_QuantizeBitRoundNumberOfSignificantDigits",_QUANTIZEBR,_QUANTIZEBR_FLAG},
 {NULL,0} /* null terminate */
 };
@@ -218,7 +219,7 @@ NUMBER       [+-]?[0-9][0-9]*[Uu]?([BbSs]|[Ll]|[Ll][Ll])?
 DBLNUMBER    [+-]?[0-9]*\.[0-9]*{exp}?[LlDd]?|[+-]?[0-9]*{exp}[LlDd]?
 FLTNUMBER    [+-]?[0-9]*\.[0-9]*{exp}?[Ff]|[+-]?[0-9]*{exp}[Ff]
 
-SPECIAL "_FillValue"|"_Format"|"_Storage"|"_ChunkSizes"|"_Fletcher32"|"_DeflateLevel"|"_Shuffle"|"_Endianness"|"_NoFill"|"_NCProperties"|"_IsNetcdf4"|"_SuperblockVersion"|"_Filter"|"_Codecs"|"_QuantizeBitgroomNumberOfSignificantDIgits"|"_QuantizeGranularBitRoundNumberOfSignificantDigits"
+SPECIAL "_FillValue"|"_Format"|"_Storage"|"_ChunkSizes"|"_Fletcher32"|"_DeflateLevel"|"_Shuffle"|"_Endianness"|"_NoFill"|"_NCProperties"|"_IsNetcdf4"|"_SuperblockVersion"|"_Filter"|"_Codecs"|"_QuantizeBitgroomNumberOfSignificantDIgits"|"_QuantizeGranularBitRoundNumberOfSignificantDigits"|"_QuantizeBitRoundNumberOfSignificantDigits"
 
 USASCII   [\x01-\x7F]
 
@@ -480,7 +481,8 @@ done: return 0;
 		if(tag == NC_NAT) {
 		    sprintf(errstr,"Illegal integer suffix: %s",stag);
 		    yyerror(errstr);
-		    goto done;
+			//goto done;
+		    return 0;
 		}
 		yytext[slen - strlen(stag)] = '\0';
 	        if(xlen > 16) { /* truncate hi order digits */
@@ -526,7 +528,7 @@ done: return 0;
 		}
                 return lexdebug(FLOAT_CONST);
                 }
-\'[^\\]\'          {
+\'[^\\]\'       {
 	        (void) sscanf((char*)&yytext[1],"%c",&byte_val);
 		return lexdebug(BYTE_CONST);
                 }
@@ -558,8 +560,9 @@ done: return 0;
 		  case 'r': byte_val = '\r'; break;
 		  case 't': byte_val = '\t'; break;
 		  case 'v': byte_val = '\v'; break;
+  		  case '0' : byte_val = '\0'; break;
 		  case '\\': byte_val = '\\'; break;
-		  case '?': byte_val = '\177'; break;
+		  case '?':  byte_val = '\177'; break;
 		  case '\'': byte_val = '\''; break;
 		  default: byte_val = (char)yytext[2];
 	           }

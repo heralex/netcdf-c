@@ -106,9 +106,6 @@ typedef enum {NCNAT, NCVAR, NCDIM, NCATT, NCTYP, NCFLD, NCGRP, NCFIL} NC_SORT;
 /** Subset of readonly flags; readable by name only thru the API. */
 #define NAMEONLYFLAG 4
 
-/** Subset of readonly flags; Value is actually in file. */
-#define MATERIALIZEDFLAG 8
-
 /** Per-variable attribute, as opposed to global */
 #define VARFLAG 16
 
@@ -118,6 +115,7 @@ typedef enum {NC_FALSE = 0, NC_TRUE = 1} nc_bool_t;
 /* Forward declarations. */
 struct NC_GRP_INFO;
 struct NC_TYPE_INFO;
+struct NCRCinfo;
 
 /**
  * This struct provides indexed Access to Meta-data objects. See the
@@ -203,11 +201,11 @@ typedef struct NC_VAR_INFO
     int storage;                 /**< Storage of this var, compact, contiguous, or chunked. */
     int endianness;              /**< What endianness for the var? */
     int parallel_access;         /**< Type of parallel access for I/O on variable (collective or independent). */
-    nc_bool_t shuffle;           /**< True if var has shuffle filter applied. */
-    nc_bool_t fletcher32;        /**< True if var has fletcher32 filter applied. */
-    size_t chunk_cache_size;     /**< Size in bytes of the var chunk cache. */
-    size_t chunk_cache_nelems;   /**< Number of slots in var chunk cache. */
-    float chunk_cache_preemption; /**< Chunk cache preemtion policy. */
+    struct ChunkCache {
+        size_t size;     /**< Size in bytes of the var chunk cache. */
+        size_t nelems;   /**< Number of slots in var chunk cache. */
+        float preemption; /**< Chunk cache preemtion policy. */
+    } chunkcache;
     int quantize_mode;           /**< Quantize mode. NC_NOQUANTIZE is 0, and means no quantization. */
     int nsd;                     /**< Number of significant digits if quantization is used, 0 if not. */
     void *format_var_info;       /**< Pointer to any binary format info. */
@@ -299,7 +297,8 @@ typedef struct NC_FILE_INFO
     nc_bool_t parallel;   /**< True if file is open for parallel access */
     nc_bool_t redef;      /**< True if redefining an existing file */
     nc_bool_t no_attr_create_order; /**< True if the creation order tracking of attributes is disabled (netcdf-4 only) */
-    int fill_mode;        /**< Fill mode for vars */
+    nc_bool_t no_dimscale_attach; /**< True if attaching dimscales to variables is disabled (netcdf-4 only) */
+    int fill_mode;        /**< Fill mode for vars - Unused internally currently */
     nc_bool_t no_write;   /**< true if nc_open has mode NC_NOWRITE. */
     NC_GRP_INFO_T *root_grp; /**< Pointer to root group. */
     short next_nc_grpid;  /**< Next available group ID. */
@@ -326,6 +325,24 @@ typedef struct NC_FILE_INFO
         void *udata;    /**< Extra memory allocated in NC4_image_init. */
     } mem;
 } NC_FILE_INFO_T;
+
+/* Collect global state info in one place */
+typedef struct NCglobalstate {
+    int initialized;
+    char* tempdir; /* track a usable temp dir */
+    char* home; /* track $HOME */
+    char* cwd; /* track getcwd */
+    struct NCRCinfo* rcinfo; /* Currently only one rc file per session */
+    struct GlobalZarr { /* Zarr specific parameters */
+	char dimension_separator;
+    } zarr;
+    struct Alignment { /* H5Pset_alignment parameters */
+        int defined; /* 1 => threshold and alignment explicitly set */
+	int threshold;
+	int alignment;
+    } alignment;
+    struct ChunkCache chunkcache;
+} NCglobalstate;
 
 /** Variable Length Datatype struct in memory. Must be identical to
  * HDF5 hvl_t. (This is only used for VL sequences, not VL strings,
@@ -460,6 +477,10 @@ extern const char* nc4_atomic_name[NUM_ATOMIC_TYPES];
 /* Binary searcher for reserved attributes */
 extern const NC_reservedatt* NC_findreserved(const char* name);
 
+/* Global State Management */
+extern NCglobalstate* NC_getglobalstate(void);
+extern void NC_freeglobalstate(void);
+
 /* Generic reserved Attributes */
 #define NC_ATT_REFERENCE_LIST "REFERENCE_LIST"
 #define NC_ATT_CLASS "CLASS"
@@ -468,9 +489,13 @@ extern const NC_reservedatt* NC_findreserved(const char* name);
 #define NC_ATT_COORDINATES "_Netcdf4Coordinates" /*see hdf5internal.h:COORDINATES*/
 #define NC_ATT_FORMAT "_Format"
 #define NC_ATT_DIMID_NAME "_Netcdf4Dimid"
+#define NC_ATT_FILLVALUE "_FillValue"
 #define NC_ATT_NC3_STRICT_NAME "_nc3_strict"
 #define NC_XARRAY_DIMS "_ARRAY_DIMENSIONS"
 #define NC_ATT_CODECS "_Codecs"
-#define NC_NCZARR_ATTR "_NCZARR_ATTR"
+#define NC_NCZARR_ATTR "_nczarr_attr"
+#define NC_NCZARR_ATTR_UC "_NCZARR_ATTR"
+#define NC_NCZARR_MAXSTRLEN_ATTR "_nczarr_maxstrlen"
+#define NC_NCZARR_DEFAULT_MAXSTRLEN_ATTR "_nczarr_default_maxstrlen"
 
 #endif /* _NC4INTERNAL_ */

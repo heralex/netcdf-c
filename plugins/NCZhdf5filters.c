@@ -16,20 +16,19 @@ Author: Dennis Heimbigner
 #include <string.h>
 #include <assert.h>
 
-#ifdef USE_SZIP
-#include <szlib.h>
-#include "H5Zszip.h"
-#endif
-
 #include "netcdf.h"
 #include "netcdf_filter.h"
 #include "netcdf_filter_build.h"
 #include "netcdf_json.h"
 
+#ifdef HAVE_SZ
+#include <szlib.h>
+#include "H5Zszip.h"
+#endif
+
 #define H5Z_FILTER_DEFLATE	1 	/*deflation like gzip	     	*/
 #define H5Z_FILTER_SHUFFLE      2       /*shuffle the data              */
 #define H5Z_FILTER_FLETCHER32   3       /*fletcher32 checksum of EDC    */
-#define H5Z_FILTER_SZIP         4       /*szip compression              */
 
 /**************************************************/
 /* NCZarr Filter Objects */
@@ -46,7 +45,7 @@ static int NCZ_fletcher32_modify_parameters(int ncid, int varid, size_t* vnparam
 static int NCZ_deflate_codec_to_hdf5(const char* codec, size_t* nparamsp, unsigned** paramsp);
 static int NCZ_deflate_hdf5_to_codec(size_t nparams, const unsigned* params, char** codecp);
 
-#ifdef USE_SZIP
+#ifdef HAVE_SZ
 static int NCZ_szip_codec_to_hdf5(const char* codec, size_t* nparamsp, unsigned** paramsp);
 static int NCZ_szip_hdf5_to_codec(size_t nparams, const unsigned* params, char** codecp);
 static int NCZ_szip_modify_parameters(int ncid, int varid, size_t* vnparamsp, unsigned** vparamsp, size_t* wnparamsp, unsigned** wparamsp);
@@ -117,10 +116,13 @@ NCZ_shuffle_modify_parameters(int ncid, int varid, size_t* vnparamsp, unsigned**
 
     if((params=(unsigned*)malloc(sizeof(unsigned)))==NULL)
         {stat = NC_ENOMEM; goto done;}
+    params[0] = (unsigned)typesize;
 
-    *wnparamsp = 1;
-    nullfree(*wparamsp);
-    *wparamsp = params; params = NULL;
+    if(wnparamsp) *wnparamsp = 1;
+    if(wparamsp) {
+        nullfree(*wparamsp);
+        *wparamsp = params; params = NULL;
+    }
 
 done:
     nullfree(params);
@@ -311,7 +313,7 @@ done:
 
 /**************************************************/
 
-#ifdef USE_SZIP
+#ifdef HAVE_SZ
 
 static NCZ_codec_t NCZ_szip_codec = {
   NCZ_CODEC_CLASS_VER,	/* Struct version number */
@@ -372,7 +374,7 @@ NCZ_szip_hdf5_to_codec(size_t nparams, const unsigned* params, char** codecp)
     int stat = NC_NOERR;
     char json[2048];
 
-    snprintf(json,sizeof(json),"{\"id\": \"%s\", \"mask\": \"%u\", \"pixels-per-block\": \"%u\"}",
+    snprintf(json,sizeof(json),"{\"id\": \"%s\", \"mask\": %u, \"pixels-per-block\": %u}",
     		NCZ_szip_codec.codecid,
 		params[H5Z_SZIP_PARM_MASK],
 		params[H5Z_SZIP_PARM_PPB]);
@@ -414,7 +416,7 @@ NCZ_szip_modify_parameters(int ncid, int varid, size_t* vnparamsp, unsigned** vp
     if((ret_value = nc_inq_type(ncid,vtype,NULL,&typesize))) goto done;
 
     /* Get datatype's precision, in case is less than full bits  */
-    dtype_precision = typesize;
+    dtype_precision = typesize*8;
 
     if(dtype_precision > 24) {
         if(dtype_precision <= 32)
@@ -424,6 +426,7 @@ NCZ_szip_modify_parameters(int ncid, int varid, size_t* vnparamsp, unsigned** vp
     } /* end if */
 
     if(ndims == 0) {ret_value = NC_EFILTER; goto done;}
+
     /* Set "local" parameter for this dataset's "pixels-per-scanline" */
     if((ret_value = nc_inq_dimlen(ncid,dimids[ndims-1],&scanline))) goto done;
 
@@ -462,15 +465,22 @@ NCZ_szip_modify_parameters(int ncid, int varid, size_t* vnparamsp, unsigned** vp
     /* Assign the final value to the scanline */
     params[H5Z_SZIP_PARM_PPS] = (unsigned)scanline;
 
-    /* Set the correct endianness flag for szip */
-    /* (Note: this may not handle non-atomic datatypes well) */
-    params[H5Z_SZIP_PARM_MASK] &= ~(SZ_LSB_OPTION_MASK|SZ_MSB_OPTION_MASK);
+    /* Set the correct mask flags */
+
+    /* From H5Pdcpl.c#H5Pset_szip */
+    params[H5Z_SZIP_PARM_MASK] &= (unsigned)(~H5_SZIP_CHIP_OPTION_MASK);
+    params[H5Z_SZIP_PARM_MASK] |= H5_SZIP_ALLOW_K13_OPTION_MASK;
+    params[H5Z_SZIP_PARM_MASK] |= H5_SZIP_RAW_OPTION_MASK;
+    params[H5Z_SZIP_PARM_MASK] &= (unsigned)(~(H5_SZIP_LSB_OPTION_MASK | H5_SZIP_MSB_OPTION_MASK));
+
+    /* From H5Zszip.c#H5Z__set_local_szip */
+    params[H5Z_SZIP_PARM_MASK] &= (unsigned)(~(H5_SZIP_LSB_OPTION_MASK | H5_SZIP_MSB_OPTION_MASK));
     switch(dtype_order) {
     case NC_ENDIAN_LITTLE:      /* Little-endian byte order */
-        params[H5Z_SZIP_PARM_MASK] |= SZ_LSB_OPTION_MASK;
+        params[H5Z_SZIP_PARM_MASK] |= H5_SZIP_LSB_OPTION_MASK;
         break;
     case NC_ENDIAN_BIG:      /* Big-endian byte order */
-        params[H5Z_SZIP_PARM_MASK] |= SZ_MSB_OPTION_MASK;
+        params[H5Z_SZIP_PARM_MASK] |= H5_SZIP_MSB_OPTION_MASK;
         break;
     default:
         HGOTO_ERROR(H5E_PLINE, H5E_BADTYPE, FAIL, "bad datatype endianness order")
@@ -510,7 +520,7 @@ done:
 }
 #endif
 
-#endif /*USE_SZIP*/
+#endif /*HAVE_SZ*/
 
 /**************************************************/
 
@@ -518,7 +528,7 @@ NCZ_codec_t* NCZ_default_codecs[] = {
 &NCZ_shuffle_codec,
 &NCZ_fletcher32_codec,
 &NCZ_zlib_codec,
-#ifdef USE_SZIP
+#ifdef HAVE_SZ
 &NCZ_szip_codec,
 #endif
 NULL
