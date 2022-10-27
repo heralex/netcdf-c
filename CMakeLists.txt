@@ -39,7 +39,7 @@ SET(NC_VERSION ${netCDF_VERSION})
 SET(PACKAGE_VERSION ${VERSION})
 
 # These values should match those in configure.ac
-SET(netCDF_LIB_VERSION 19})
+SET(netCDF_LIB_VERSION 19)
 SET(netCDF_SO_VERSION 19)
 
 # Version of the dispatch table. This must match the value in
@@ -856,7 +856,7 @@ IF(USE_HDF5)
   # This needs to be near the beginning since we
   # need to know whether to add "-lz" to the symbol
   # tests below.
-  CHECK_C_SOURCE_COMPILES("#include <H5public.h>
+  CHECK_C_SOURCE_COMPILES("#include <H5pubconf.h>
    #if !H5_HAVE_ZLIB_H
    #error
    #endif
@@ -2216,6 +2216,13 @@ SET(netCDF_LIB_CORENAME  "netcdf")
 # Set the true names of all the libraries, if customized by external project
 #####
 # Recurse into other subdirectories.
+if (STATUS_PARALLEL)
+    include_directories("/usr/include/x86_64-linux-gnu/mpich")
+    list(APPEND ALL_TLL_LIBS mpich)
+    SET(PAR_LINK_LIB mpich)
+endif()
+
+
 add_subdirectory("include")
 add_subdirectory(libdispatch)
 add_subdirectory(libsrc)

@@ -27,3 +27,7 @@ build_llvm
 .vagrant
 Vagrantfile
 netcdf-fortran
+libsrc/attr.c
+libsrc/ncx.c
+.gitignore
+libsrc/putget.c
